@@ -193,7 +193,7 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
     <label>対象年月：</label>
     <input type="month" id="globalMonth" value="2026-07" onchange="onMonthChange()">
   </div>
-  <div class="header-note">データは自動保存されます</div>
+  <div class="header-note" id="syncStatus">接続中…</div>
 </div>
 
 <div class="tabs">
@@ -261,12 +261,30 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
 
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 // PDF.js worker
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
+
+// ── Firebase ──────────────────────────────────
+firebase.initializeApp({
+  apiKey: "AIzaSyAg3c-kcrS4-cbPW1G6cgCn2tqzVtl6y5g",
+  authDomain: "nsd-invoice.firebaseapp.com",
+  databaseURL: "https://nsd-invoice-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "nsd-invoice",
+  storageBucket: "nsd-invoice.firebasestorage.app",
+  messagingSenderId: "1045940808175",
+  appId: "1:1045940808175:web:12a167d2443be0c980ae1a"
+});
+const _db = firebase.database();
+let _dbRef = null;
+let _writePending = false;
+let _writeTimer = null;
+let _suiMappingCache = {};
 
 // ── Master data ──────────────────────────────
 const COMPANIES = {
@@ -406,25 +424,60 @@ const DEFAULT_2026_07 = {
 
 // ── State ─────────────────────────────────────
 let currentMonth = '2026-07';
+let DATA = null;
 
-function storageKey(m) { return 'nsd5_' + m; }
-
-function loadData(m) {
-  try { const r = localStorage.getItem(storageKey(m)); if (r) return JSON.parse(r); } catch(e) {}
-  if (m === '2026-07') return JSON.parse(JSON.stringify(DEFAULT_2026_07));
+function makeBlankData() {
   const blank = {};
   [...SITES, ...SELF_SITES].forEach(s => { blank[s.id] = {}; COLS.forEach(c => { blank[s.id][c.id] = 0; }); });
   return blank;
 }
 
-function saveData(m, d) { try { localStorage.setItem(storageKey(m), JSON.stringify(d)); } catch(e) {} }
+function setSyncStatus(msg) {
+  const el = document.getElementById('syncStatus');
+  if (el) el.textContent = msg;
+}
 
-let DATA = loadData(currentMonth);
+function subscribeMonth(m) {
+  if (_dbRef) _dbRef.off();
+  _dbRef = _db.ref('data/' + m);
+  _dbRef.on('value', (snap) => {
+    if (_writePending) return;
+    const val = snap.val();
+    if (!val) {
+      DATA = m === '2026-07' ? JSON.parse(JSON.stringify(DEFAULT_2026_07)) : makeBlankData();
+      _db.ref('data/' + m).set(DATA);
+    } else {
+      DATA = val;
+    }
+    renderAll();
+    setSyncStatus('同期済み ✓');
+  }, (err) => {
+    setSyncStatus('接続エラー');
+    console.error(err);
+  });
+}
 
-function onMonthChange() {
+function saveData(m, d) {
+  _writePending = true;
+  setSyncStatus('保存中…');
+  if (_writeTimer) clearTimeout(_writeTimer);
+  _writeTimer = setTimeout(() => {
+    _db.ref('data/' + m).set(d)
+      .then(() => { setTimeout(() => { _writePending = false; setSyncStatus('同期済み ✓'); }, 300); })
+      .catch(() => { _writePending = false; setSyncStatus('保存エラー'); });
+  }, 800);
+}
+
+async function onMonthChange() {
   currentMonth = document.getElementById('globalMonth').value;
-  DATA = loadData(currentMonth);
-  renderAll();
+  setSyncStatus('読込中…');
+  subscribeMonth(currentMonth);
+}
+
+async function initData() {
+  setSyncStatus('読込中…');
+  await _db.ref('suiMapping').once('value').then(s => { _suiMappingCache = s.val() || {}; });
+  subscribeMonth(currentMonth);
 }
 
 function getVal(sid, cid) { return (DATA[sid] && DATA[sid][cid]) ? +DATA[sid][cid] : 0; }
@@ -613,10 +666,8 @@ async function extractPDFText(file) {
 
 // ── Smart PDF Parsers ──────────────────────────
 
-function getSuiMapping() {
-  try { return JSON.parse(localStorage.getItem('suiMapping') || '{}'); } catch(e) { return {}; }
-}
-function saveSuiMapping(m) { try { localStorage.setItem('suiMapping', JSON.stringify(m)); } catch(e) {} }
+function getSuiMapping() { return _suiMappingCache; }
+function saveSuiMapping(m) { _suiMappingCache = m; _db.ref('suiMapping').set(m); }
 
 // Hardcoded SUI site ID → site key (prefix: ライドプラン=767976xx, サニラボ=807908xx, 1.2.3=762088xx)
 const SUI_SITE_MAP = {
@@ -1281,8 +1332,8 @@ function renderInvoices() {
 }
 
 // ── Init ──────────────────────────────────────
-function renderAll() { renderEntry(); }
-renderAll();
+function renderAll() { if (DATA) renderEntry(); }
+initData();
 </script>
 </body>
 </html>
