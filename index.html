@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>収納代行 管理システム</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+:root {
+  --bg: #eef0f4;
+  --surface: #fff;
+  --border: #d0d5dd;
+  --navy: #1b3a6b;
+  --navy2: #254e9a;
+  --text: #1a1a1a;
+  --muted: #6b7280;
+  --yellow: #fff9c4;
+  --yellow-border: #e0d96a;
+  --green: #16a34a;
+  --red: #dc2626;
+  --tab-active: #1b3a6b;
+  --row-alt: #f7f8fa;
+  color-scheme: light;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--navy);
+  color: #fff;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.header h1 { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.header-spacer { flex: 1; }
+.header label { font-size: 11px; opacity: .8; }
+.header input[type="month"] {
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.3);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+}
+.header input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+/* ── Tabs ── */
+.tabs { display: flex; background: #fff; border-bottom: 2px solid var(--navy); }
+.tab-btn {
+  padding: 10px 24px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+}
+.tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; }
+.tab-btn:hover:not(.active) { color: var(--navy2); background: #f0f4ff; }
+
+/* ── Main content ── */
+.main { padding: 16px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Data Entry Tab ── */
+.group-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--navy);
+  border-radius: 6px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.group-header {
+  background: var(--navy);
+  color: #fff;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.subgroup-header {
+  background: #e8edf5;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  border-bottom: 1px solid var(--border);
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.data-table th {
+  background: #f0f4ff;
+  border: 1px solid #c8d5e8;
+  padding: 6px 8px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.data-table td {
+  border: 1px solid #dde3ec;
+  padding: 4px 6px;
+}
+.data-table td.site-name {
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 100px;
+  padding: 4px 12px;
+}
+.data-table td.total-cell {
+  font-weight: 700;
+  background: #f0f4ff;
+  text-align: right;
+  white-space: nowrap;
+}
+.data-table tr:nth-child(even) { background: var(--row-alt); }
+.data-table tr:hover { background: #eef3ff; }
+.data-table tr.subtotal-row { background: #dce6f5 !important; font-weight: 700; }
+.num-input {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 12px;
+  text-align: right;
+  border: 1px solid #c8d5e8;
+  border-radius: 3px;
+  padding: 3px 6px;
+  width: 100%;
+  background: #fff;
+  color: var(--text);
+}
+.num-input:focus { outline: 2px solid var(--navy2); border-color: var(--navy2); }
+.num-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+/* ── Summary Tab ── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.summary-card-header {
+  background: var(--navy);
+  color: #fff;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.summary-table tr td:first-child {
+  padding: 7px 14px;
+  color: var(--muted);
+}
+.summary-table tr td:last-child {
+  padding: 7px 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.summary-table tr { border-bottom: 1px solid #eee; }
+.summary-table tr.hl td { background: #fff3cd; font-weight: 700; }
+.summary-table tr.hl td:last-child { color: var(--navy); font-size: 14px; }
+.summary-table tr:last-child td { background: #e8f5e9; }
+.summary-table tr:last-child td:last-child { color: var(--green); font-size: 15px; font-weight: 700; }
+
+/* big totals */
+.big-total-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green);
+  border-radius: 6px;
+  padding: 14px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.big-total-item { text-align: center; }
+.big-total-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.big-total-val { font-size: 18px; font-weight: 700; }
+.big-total-val.green { color: var(--green); }
+.big-total-val.red { color: var(--red); }
+
+/* ── Invoice Tab ── */
+.inv-controls {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.inv-controls .field label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; }
+.inv-controls select, .inv-controls input {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+}
+.inv-controls select { min-width: 220px; }
+.print-btn {
+  padding: 8px 20px;
+  background: var(--navy);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.print-btn:hover { background: var(--navy2); }
+.all-invoices { display: flex; flex-direction: column; gap: 24px; }
+.inv-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+/* ── Invoice Document ── */
+.invoice {
+  background: #fff;
+  color: #111;
+  border: 1px solid #bbb;
+  padding: 36px 44px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 11.5px;
+  line-height: 1.65;
+  max-width: 820px;
+}
+.inv-top {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.inv-date-box {
+  background: #fff9c4;
+  border: 1px solid #e0d96a;
+  padding: 3px 14px;
+  font-size: 11.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+.inv-recipient { font-size: 11px; line-height: 1.8; }
+.inv-recipient-name { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.inv-issuer { text-align: right; font-size: 11px; line-height: 1.8; margin-top: 10px; }
+.inv-issuer-name { font-size: 13px; font-weight: 700; }
+.inv-title { text-align: center; font-size: 20px; font-weight: 700; margin: 18px 0 10px; letter-spacing: .05em; }
+.inv-note { font-size: 10.5px; margin-bottom: 14px; }
+.inv-period-row { margin-bottom: 14px; }
+.inv-period-label { font-size: 10.5px; margin-right: 6px; }
+.inv-period-val { background: #fff9c4; border: 1px solid #e0d96a; padding: 3px 14px; font-size: 11px; }
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+.inv-table th {
+  background: #dce3ed;
+  border: 1px solid #999;
+  padding: 5px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.inv-table td { border: 1px solid #999; padding: 5px 10px; font-size: 11px; }
+.inv-table td.n { text-align: center; width: 26px; }
+.inv-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 110px; }
+.inv-table td.biko { text-align: center; min-width: 50px; }
+.inv-table tr.sub td { background: #f0f0f0; font-weight: 700; }
+.inv-summary { width: 100%; border-collapse: collapse; }
+.inv-summary th { background: #dce3ed; border: 1px solid #999; padding: 5px 10px; font-size: 10.5px; font-weight: 700; text-align: center; }
+.inv-summary td { border: 1px solid #999; padding: 6px 10px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.inv-summary td.num { text-align: right; }
+
+/* ── Print ── */
+@media print {
+  .header, .tabs, .inv-controls, .inv-group-label, .print-btn { display: none !important; }
+  .main { padding: 0; }
+  .invoice { border: none; padding: 20px; page-break-after: always; max-width: 100%; }
+  .invoice:last-child { page-break-after: auto; }
+  .all-invoices { gap: 0; }
+  body { background: #fff; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>収納代行 管理システム</h1>
+  <div class="header-spacer"></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <label>対象年月：</label>
+    <input type="month" id="globalMonth" value="2026-07" onchange="onMonthChange()">
+  </div>
+  <div style="font-size:11px;opacity:.7">データは自動保存されます</div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('entry')">① データ入力</button>
+  <button class="tab-btn" onclick="switchTab('summary')">② 集計表</button>
+  <button class="tab-btn" onclick="switchTab('invoice')">③ 請求書</button>
+</div>
+
+<div class="main">
+
+  <!-- Tab 1: Data Entry -->
+  <div id="tab-entry" class="tab-panel active">
+    <div id="entryContent"></div>
+  </div>
+
+  <!-- Tab 2: Summary -->
+  <div id="tab-summary" class="tab-panel">
+    <div id="summaryContent"></div>
+  </div>
+
+  <!-- Tab 3: Invoice -->
+  <div id="tab-invoice" class="tab-panel">
+    <div class="inv-controls">
+      <div class="field">
+        <label>請求書を選択</label>
+        <select id="invSelect" onchange="renderInvoices()">
+          <option value="all">全件表示（6枚）</option>
+          <option value="0">サニーラボ → トラスト</option>
+          <option value="1">サニーラボ → インクルード</option>
+          <option value="2">ライドプラン → トラスト</option>
+          <option value="3">ライドプラン → リミット</option>
+          <option value="4">1.2.3 → ライドプラン</option>
+          <option value="5">1.2.3 → インクルード</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>発行日</label>
+        <input type="date" id="issueDate" value="2026-08-01" onchange="renderInvoices()">
+      </div>
+      <div class="field">
+        <label>手数料率（%）</label>
+        <input type="number" id="feeRate" value="4" step="0.1" style="width:80px" onchange="renderInvoices()">
+      </div>
+      <button class="print-btn" onclick="window.print()">🖨 印刷</button>
+    </div>
+    <div id="invoiceContent"></div>
+  </div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────
+// Master data definitions
+// ────────────────────────────────────────────
+
+const COMPANIES = {
+  sunny:   { full: '株式会社Sunny Lab.', post: '〒106-0032', addr: '東京都港区六本木3-15-2 ライオンズマンション六本木第三204号', tel: 'TEL：03-6807-4953' },
+  ride:    { full: '株式会社RIDE PLAN',  post: '〒106-0031', addr: '東京都港区西麻布三丁目5番4号', tel: 'TEL：03-5797-7962' },
+  ichi:    { full: '株式会社1.2.3',      post: '〒106-0032', addr: '東京都港区六本木5-18-19 グランメール六本木608', tel: 'TEL：03-6459-1557' },
+  trust:   { full: 'トラストマネー株式会社', post: '〒106-0032', addr: '東京都港区六本木3-16-26 ハリファックスビル1階', tel: 'TEL：03-6303-0261' },
+  include: { full: '株式会社INCLUDE',    post: '〒106-0032', addr: '東京都港区六本木3-16-26 ハリファックスビル1階', tel: 'TEL：03-6303-3323' },
+  limit:   { full: '株式会社LIMITLESS CREDIT', post: '〒106-0032', addr: '東京都港区六本木3-16-26 ハリファックスビル1階', tel: 'TEL：05-5422-9611' },
+};
+
+// Billing relationships (index = used in invoice tab)
+const RELS = [
+  { id: 0, label: 'サニーラボ → トラスト',    contractor: 'sunny', client: 'trust'   },
+  { id: 1, label: 'サニーラボ → インクルード', contractor: 'sunny', client: 'include' },
+  { id: 2, label: 'ライドプラン → トラスト',   contractor: 'ride',  client: 'trust'   },
+  { id: 3, label: 'ライドプラン → リミット',   contractor: 'ride',  client: 'limit'   },
+  { id: 4, label: '1.2.3 → ライドプラン',      contractor: 'ichi',  client: 'ride'    },
+  { id: 5, label: '1.2.3 → インクルード',      contractor: 'ichi',  client: 'include' },
+];
+
+// Sites master
+const SITES = [
+  { id: 'artist',   name: 'アーチスト',  rel: 0 },
+  { id: 'roto',     name: 'ロト技研',    rel: 1 },
+  { id: 'winners',  name: 'WINNERS',     rel: 2 },
+  { id: 'skygate',  name: 'スカイゲート', rel: 3 },
+  { id: 'sherpa',   name: 'SHERPA',      rel: 4 },
+  { id: 'familia',  name: 'ファミリア',  rel: 4 },
+  { id: 'bigbonus', name: 'BIG BONUS',   rel: 5 },
+  { id: 'nextdoor', name: 'NEXT DOOR',   rel: 5 },
+];
+
+// Payment processor columns
+const COLS = [
+  { id: 'sui',   label: 'SUI\n(プライムバンテージ)' },
+  { id: 'rc',    label: 'ロボペイ\n(クレカ)' },
+  { id: 'rb',    label: 'ロボペイ\n(銀振)' },
+  { id: 'univa', label: 'ユニヴァ\n(銀振)' },
+  { id: 'max',   label: 'マックスコネクト' },
+  { id: 'cash',  label: '現金' },
+];
+
+// Default data for 2026-07
+const DEFAULT_2026_07 = {
+  artist:   { sui: 1839838, rc: 0,       rb: 2441348, univa: 0,     max: 0, cash: 0 },
+  roto:     { sui: 28960,   rc: 72660,   rb: 1095060, univa: 0,     max: 0, cash: 0 },
+  winners:  { sui: 633300,  rc: 0,       rb: 1531000, univa: 0,     max: 0, cash: 0 },
+  skygate:  { sui: 87000,   rc: 0,       rb: 407000,  univa: 0,     max: 0, cash: 0 },
+  sherpa:   { sui: 0,       rc: 0,       rb: 10000,   univa: 0,     max: 0, cash: 0 },
+  familia:  { sui: 2945000, rc: 0,       rb: 1480000, univa: 10000, max: 0, cash: 58000 },
+  bigbonus: { sui: 0,       rc: 518240,  rb: 701280,  univa: 0,     max: 0, cash: 0 },
+  nextdoor: { sui: 962420,  rc: 254500,  rb: 1255040, univa: 0,     max: 0, cash: 0 },
+};
+
+// ────────────────────────────────────────────
+// State & persistence
+// ────────────────────────────────────────────
+
+let currentMonth = '2026-07';
+
+function storageKey(month) { return 'nsd_' + month; }
+
+function loadData(month) {
+  try {
+    const raw = localStorage.getItem(storageKey(month));
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  if (month === '2026-07') return JSON.parse(JSON.stringify(DEFAULT_2026_07));
+  // blank for other months
+  const blank = {};
+  SITES.forEach(s => { blank[s.id] = {}; COLS.forEach(c => { blank[s.id][c.id] = 0; }); });
+  return blank;
+}
+
+function saveData(month, data) {
+  try { localStorage.setItem(storageKey(month), JSON.stringify(data)); } catch(e) {}
+}
+
+let DATA = loadData(currentMonth);
+
+function onMonthChange() {
+  currentMonth = document.getElementById('globalMonth').value;
+  DATA = loadData(currentMonth);
+  renderAll();
+}
+
+function getVal(siteId, colId) {
+  return (DATA[siteId] && DATA[siteId][colId]) ? DATA[siteId][colId] : 0;
+}
+
+function setVal(siteId, colId, val) {
+  if (!DATA[siteId]) DATA[siteId] = {};
+  DATA[siteId][colId] = val;
+  saveData(currentMonth, DATA);
+  // Update totals in current row
+  updateRowTotal(siteId);
+  renderSummaryAndInvoice();
+}
+
+function rowTotal(siteId) {
+  return COLS.reduce((s, c) => s + getVal(siteId, c.id), 0);
+}
+
+function relTotal(relId) {
+  return SITES.filter(s => s.rel === relId).reduce((s, site) => s + rowTotal(site.id), 0);
+}
+
+// ────────────────────────────────────────────
+// Formatting
+// ────────────────────────────────────────────
+
+function fmt(n) {
+  if (!n) return '¥0';
+  if (n < 0) return '-¥' + Math.abs(n).toLocaleString('ja-JP');
+  return '¥' + n.toLocaleString('ja-JP');
+}
+
+function fmtN(n) { return (n || 0).toLocaleString('ja-JP'); }
+
+function periodStr(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return `${y}/${m}/1　〜　${y}/${m}/${last}`;
+}
+
+function periodMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return `${y}/${m}`;
+}
+
+function issueDateStr(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  return `${dt.getFullYear()}年${dt.getMonth()+1}月${dt.getDate()}日`;
+}
+
+// ────────────────────────────────────────────
+// Tab switching
+// ────────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'summary') renderSummary();
+  if (name === 'invoice') renderInvoices();
+}
+
+// ────────────────────────────────────────────
+// Tab 1: Data Entry
+// ────────────────────────────────────────────
+
+function renderEntry() {
+  const container = document.getElementById('entryContent');
+
+  // Group sites by contractor (rel 0-1: sunny, 2-3: ride, 4-5: ichi)
+  const contractorGroups = [
+    { name: 'サニーラボ', color: '#1b3a6b', rels: [0, 1] },
+    { name: 'ライドプラン', color: '#1b3a6b', rels: [2, 3] },
+    { name: '1.2.3', color: '#1b3a6b', rels: [4, 5] },
+  ];
+
+  let html = '';
+  contractorGroups.forEach(group => {
+    const groupTotal = group.rels.reduce((s, rid) => s + relTotal(rid), 0);
+    html += `<div class="group-block">
+      <div class="group-header">
+        <span>${group.name}</span>
+        <span>合計：${fmt(groupTotal)}</span>
+      </div>`;
+
+    group.rels.forEach(rid => {
+      const rel = RELS[rid];
+      const clientCo = COMPANIES[rel.client];
+      const relSites = SITES.filter(s => s.rel === rid);
+      const rTotal = relTotal(rid);
+
+      html += `<div class="subgroup-header" style="display:flex;justify-content:space-between">
+        <span>→ ${clientCo.full}</span>
+        <span style="font-size:12px">合計：${fmt(rTotal)}</span>
+      </div>
+      <table class="data-table">
+        <thead><tr>
+          <th style="text-align:left;min-width:110px">サイト名</th>`;
+
+      COLS.forEach(c => {
+        html += `<th>${c.label.replace('\n', '<br>')}</th>`;
+      });
+      html += `<th>合 計</th></tr></thead><tbody>`;
+
+      relSites.forEach(site => {
+        const tot = rowTotal(site.id);
+        html += `<tr>
+          <td class="site-name">${site.name}</td>`;
+        COLS.forEach(c => {
+          const v = getVal(site.id, c.id);
+          html += `<td style="padding:2px 4px">
+            <input class="num-input" type="number"
+              value="${v}"
+              data-site="${site.id}" data-col="${c.id}"
+              onchange="setVal('${site.id}','${c.id}',+this.value)"
+              onfocus="this.select()"
+            >
+          </td>`;
+        });
+        html += `<td class="total-cell" id="rowtotal-${site.id}">${fmt(tot)}</td></tr>`;
+      });
+
+      // Subtotal row
+      html += `<tr class="subtotal-row"><td class="site-name" colspan="1">小 計</td>`;
+      COLS.forEach(c => {
+        const colSum = relSites.reduce((s, site) => s + getVal(site.id, c.id), 0);
+        html += `<td style="text-align:right;padding:4px 10px">${colSum ? fmtN(colSum) : ''}</td>`;
+      });
+      html += `<td class="total-cell">${fmt(rTotal)}</td></tr>`;
+
+      html += `</tbody></table>`;
+    });
+
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function updateRowTotal(siteId) {
+  const el = document.getElementById('rowtotal-' + siteId);
+  if (el) el.textContent = fmt(rowTotal(siteId));
+  // Also update group/subgroup totals — simplest: re-render (small perf cost is fine)
+  // But we already called renderSummaryAndInvoice; just rebuild entry header totals
+}
+
+function renderSummaryAndInvoice() {
+  // Update summary if tab visible
+  if (document.getElementById('tab-summary').classList.contains('active')) renderSummary();
+  if (document.getElementById('tab-invoice').classList.contains('active')) renderInvoices();
+  // Also rebuild entry totals display (just the header totals in group-header)
+  // We do a lightweight partial update
+  document.querySelectorAll('.group-header span:last-child').forEach((el, i) => {
+    const groups = [
+      [0, 1], [2, 3], [4, 5]
+    ];
+    const tot = groups[i].reduce((s, rid) => s + relTotal(rid), 0);
+    el.textContent = '合計：' + fmt(tot);
+  });
+}
+
+// ────────────────────────────────────────────
+// Tab 2: Summary
+// ────────────────────────────────────────────
+
+function calcRel(relId, rate) {
+  const amt = relTotal(relId);
+  const fee = Math.floor(amt * rate / 100);
+  const tax = Math.floor(fee * 0.1);
+  const feeTotal = fee + tax;
+  const balance = amt - feeTotal;
+  return { amt, fee, tax, feeTotal, balance };
+}
+
+function renderSummary() {
+  const rate = parseFloat(document.getElementById('feeRate').value) || 4;
+  const container = document.getElementById('summaryContent');
+
+  let totalAmt = 0, totalFee = 0, totalBalance = 0;
+
+  let cardsHtml = '<div class="summary-grid">';
+  RELS.forEach(rel => {
+    const c = COMPANIES[rel.contractor];
+    const cl = COMPANIES[rel.client];
+    const r = calcRel(rel.id, rate);
+    totalAmt += r.amt;
+    totalFee += r.feeTotal;
+    totalBalance += r.balance;
+
+    cardsHtml += `
+    <div class="summary-card">
+      <div class="summary-card-header">
+        <span>${c.full.replace('株式会社','').replace('トラストマネー','')} → ${cl.full.replace('株式会社','').replace('トラストマネー','')}</span>
+        <span style="font-size:11px;opacity:.8">${rel.label}</span>
+      </div>
+      <table class="summary-table">
+        <tr><td>① 取扱金額</td><td>${fmt(r.amt)}</td></tr>
+        <tr><td>② 取扱手数料（${rate}%）</td><td>${fmt(r.fee)}</td></tr>
+        <tr><td>③ 消費税（②×10%）</td><td>${fmt(r.tax)}</td></tr>
+        <tr class="hl"><td>④ ②＋③（税込手数料）</td><td>${fmt(r.feeTotal)}</td></tr>
+        <tr><td>差引振込金額</td><td>${fmt(r.balance)}</td></tr>
+      </table>
+    </div>`;
+  });
+  cardsHtml += '</div>';
+
+  const bigBar = `
+  <div class="big-total-bar">
+    <div class="big-total-item">
+      <div class="big-total-label">取扱金額 合計</div>
+      <div class="big-total-val">${fmt(totalAmt)}</div>
+    </div>
+    <div style="font-size:20px;color:var(--muted)">−</div>
+    <div class="big-total-item">
+      <div class="big-total-label">手数料（税込）合計</div>
+      <div class="big-total-val red">${fmt(totalFee)}</div>
+    </div>
+    <div style="font-size:20px;color:var(--muted)">=</div>
+    <div class="big-total-item">
+      <div class="big-total-label">差引振込金額 合計</div>
+      <div class="big-total-val green">${fmt(totalBalance)}</div>
+    </div>
+  </div>`;
+
+  container.innerHTML = bigBar + cardsHtml;
+}
+
+// ────────────────────────────────────────────
+// Tab 3: Invoices
+// ────────────────────────────────────────────
+
+function buildInvoice(relId) {
+  const rel = RELS[relId];
+  const contractor = COMPANIES[rel.contractor];
+  const client = COMPANIES[rel.client];
+  const rate = parseFloat(document.getElementById('feeRate').value) || 4;
+  const issueDate = document.getElementById('issueDate').value;
+  const ym = currentMonth;
+
+  const amt = relTotal(relId);
+  const fee = Math.floor(amt * rate / 100);
+  const tax = Math.floor(fee * 0.1);
+  const feeTotal = fee + tax;
+  const balance = amt - feeTotal;
+
+  return `
+<div class="invoice">
+  <div class="inv-top">
+    <div>
+      <div class="inv-recipient">
+        ${client.post}<br>${client.addr}<br>${client.tel}
+      </div>
+      <div class="inv-recipient-name">${client.full}　御中</div>
+    </div>
+    <div>
+      <div class="inv-date-box">${issueDateStr(issueDate)}</div>
+      <div class="inv-issuer">
+        <div class="inv-issuer-name">${contractor.full}</div>
+        <div>${contractor.post}</div>
+        <div>${contractor.addr}</div>
+        <div>${contractor.tel}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="inv-title">お取引明細書</div>
+  <div class="inv-note">
+    今回のお支払い及びご請求の明細をご報告申し上げます。<br>
+    つきましては、内容をご確認いただきますようお願い申し上げます。
+  </div>
+
+  <div class="inv-period-row">
+    <span class="inv-period-label">対象期間：</span>
+    <span class="inv-period-val">${periodStr(ym)}</span>
+  </div>
+
+  <table class="inv-table">
+    <thead>
+      <tr>
+        <th colspan="2" style="text-align:left">内　容</th>
+        <th>金　額</th>
+        <th>金　額</th>
+        <th>備　考</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="n">①</td><td>取扱金額</td>
+        <td class="num">${fmt(amt)}</td><td class="num"></td><td class="biko"></td>
+      </tr>
+      <tr>
+        <td class="n">②</td><td>取扱手数料</td>
+        <td class="num">${fmt(fee)}</td><td class="num">¥0</td><td class="biko">${rate}%</td>
+      </tr>
+      <tr>
+        <td class="n">③</td><td>消費税</td>
+        <td class="num">${fmt(tax)}</td><td class="num">¥0</td><td class="biko"></td>
+      </tr>
+      <tr>
+        <td class="n">④</td><td>②+③</td>
+        <td class="num">${fmt(feeTotal)}</td><td class="num">¥0</td><td class="biko"></td>
+      </tr>
+      <tr>
+        <td class="n">⑤</td><td>デポジット額</td>
+        <td class="num">¥0</td><td class="num">¥0</td><td class="biko"></td>
+      </tr>
+      <tr>
+        <td class="n">⑥</td><td>その他金額</td>
+        <td class="num">¥0</td><td class="num">¥0</td><td class="biko"></td>
+      </tr>
+      <tr class="sub">
+        <td colspan="2"><strong>差引振込金額</strong></td>
+        <td class="num"><strong>${fmt(balance)}</strong></td>
+        <td class="num"><strong>¥0</strong></td>
+        <td class="biko"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table class="inv-summary">
+    <thead>
+      <tr>
+        <th>取扱月</th>
+        <th>ご請求内容</th>
+        <th>入金額</th>
+        <th>取扱手数料（税込）</th>
+        <th>差引金額</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${periodMonth(ym)}</td>
+        <td>収納代行取扱手数料</td>
+        <td class="num">${fmt(amt)}</td>
+        <td class="num">${fmt(feeTotal)}</td>
+        <td class="num">${fmt(balance)}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+}
+
+function renderInvoices() {
+  const sel = document.getElementById('invSelect').value;
+  const container = document.getElementById('invoiceContent');
+
+  if (sel === 'all') {
+    let html = '<div class="all-invoices">';
+    RELS.forEach(rel => {
+      html += `<div>
+        <div class="inv-group-label">${rel.label}</div>
+        ${buildInvoice(rel.id)}
+      </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } else {
+    container.innerHTML = buildInvoice(parseInt(sel));
+  }
+}
+
+// ────────────────────────────────────────────
+// Init
+// ────────────────────────────────────────────
+
+function renderAll() {
+  renderEntry();
+  renderSummary();
+  renderInvoices();
+}
+
+renderAll();
+</script>
+</body>
+</html>
