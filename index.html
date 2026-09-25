@@ -1090,7 +1090,39 @@ function renderSummary() {
     <div class="big-total-item"><div class="big-total-label">差引振込金額 合計</div><div class="big-total-val green">${fmt(totalBalance)}</div></div>
   </div>`;
 
-  container.innerHTML = bigBar + cardsHtml;
+  // Detailed breakdown table (same style as self summary)
+  const billingGroups = [
+    { label: 'サニーラボ',   rels: [0,1] },
+    { label: 'ライドプラン', rels: [2,3] },
+    { label: '1.2.3',       rels: [4,5] },
+  ];
+  const colHeaders = COLS.map(c => `<th>${c.label.replace('\n','<br>')}</th>`).join('');
+  let grandTotal = 0;
+  let tableHtml = `<div class="self-summary-card" style="border-color:var(--border)">
+    <div class="self-summary-header" style="background:var(--navy)">請求サイト 決済明細</div>
+    <table class="self-summary-table">
+      <thead><tr><th>グループ</th><th>サイト名</th>${colHeaders}<th>合計</th></tr></thead>
+      <tbody>`;
+
+  billingGroups.forEach(grp => {
+    const sites = SITES.filter(s => grp.rels.includes(s.rel));
+    sites.forEach((site, i) => {
+      const tot = rowTotal(site.id);
+      const colCells = COLS.map(c => `<td class="num">${getVal(site.id,c.id) ? fmtN(getVal(site.id,c.id)) : ''}</td>`).join('');
+      const groupCell = i === 0 ? `<td rowspan="${sites.length}" style="font-weight:700;vertical-align:middle">${grp.label}</td>` : '';
+      tableHtml += `<tr>${groupCell}<td>${site.name}</td>${colCells}<td class="num" style="font-weight:700">${fmt(tot)}</td></tr>`;
+    });
+    const grpTot = grp.rels.reduce((s,rid) => s + relTotal(rid), 0);
+    grandTotal += grpTot;
+    const grpCols = COLS.map(c => {
+      const sum = sites.reduce((s,st) => s + getVal(st.id,c.id), 0);
+      return `<td class="num">${sum ? fmtN(sum) : ''}</td>`;
+    }).join('');
+    tableHtml += `<tr class="total-row"><td colspan="2">小 計（${grp.label}）</td>${grpCols}<td class="num">${fmt(grpTot)}</td></tr>`;
+  });
+  tableHtml += `</tbody></table></div>`;
+
+  container.innerHTML = bigBar + cardsHtml + '<div class="section-divider" style="margin-top:24px">決済種別 明細</div>' + tableHtml;
 }
 
 // ── Tab 4: Summary (self) ─────────────────────
