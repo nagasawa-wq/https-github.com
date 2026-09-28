@@ -836,16 +836,23 @@ function parseRobotPayment(text) {
     return { format: 'ROBOT PAYMENT（未登録 店舗' + storeId + '）', entries, unmappedIds: { [storeId]: 0 } };
   }
 
-  // Check 売上代金対象期間 → determine if 2ヶ月後 (rc2/rb2)
+  // 振込日から入金月を取得 → 対象期間との差で rc/rc2, rb/rb2 を判定
   const periodM = text.match(/売上代金対象期間\s+(\d{4})年(\d{2})月/);
+  const furikomiM = text.match(/振込日[：:]\s*(\d{4})年(\d{2})月/) ||
+                    text.match(/明細発行日\s+(\d{4})年(\d{2})月/);
   let isDelayed = false;
   let pdfPeriod = null;
   if (periodM) {
     const py = parseInt(periodM[1]), pm = parseInt(periodM[2]);
-    const [cy, cm] = currentMonth.split('-').map(Number);
-    isDelayed = (cy * 12 + cm) - (py * 12 + pm) >= 2;
-    // 入金される月（2ヶ月後なら currentMonth、即時なら対象期間の月）
-    pdfPeriod = isDelayed ? currentMonth : `${periodM[1]}-${periodM[2]}`;
+    let payY, payM;
+    if (furikomiM) {
+      payY = parseInt(furikomiM[1]); payM = parseInt(furikomiM[2]);
+    } else {
+      const [cy, cm] = currentMonth.split('-').map(Number);
+      payY = cy; payM = cm;
+    }
+    isDelayed = (payY * 12 + payM) - (py * 12 + pm) >= 2;
+    pdfPeriod = `${payY}-${String(payM).padStart(2,'0')}`;
   }
 
   // クレカ: カード 売上代金計算書 → 合計 {件数} {金額(A)} {手数料}
@@ -939,10 +946,12 @@ function renderSmartCard(card, result) {
       </tr></thead><tbody>`;
     result.entries.forEach((e, i) => {
       const site = allSites.find(s => s.id === e.siteId);
-      const col = COLS.find(c => c.id === e.col);
+      const colOpts = COLS.map(c => `<option value="${c.id}"${c.id===e.col?' selected':''}>${c.label.replace('\n',' ')}</option>`).join('');
       html += `<tr style="background:${i%2?'#f7f8fa':'#fff'}">
         <td style="padding:5px 8px;border:1px solid #dde3ec">${site?.name || e.siteId}</td>
-        <td style="padding:5px 8px;border:1px solid #dde3ec;text-align:center">${col?.label.replace('\n',' ') || e.col}</td>
+        <td style="padding:5px 8px;border:1px solid #dde3ec;text-align:center">
+          <select onchange="updateEntryCol('${cardId}',${i},this.value)" style="font-family:inherit;font-size:11px;border:1px solid #c8d5e8;border-radius:3px;padding:2px 6px">${colOpts}</select>
+        </td>
         <td style="padding:5px 8px;border:1px solid #dde3ec;text-align:right;font-weight:700">${fmt(e.amount)}</td>
       </tr>`;
     });
@@ -1050,6 +1059,13 @@ function undoSmartFill(cardId) {
   const undoBtn = card.querySelector('.undo-btn');
   if (applyBtn) { applyBtn.textContent = '▶ 一括自動入力'; applyBtn.disabled = false; applyBtn.style.opacity = '1'; }
   if (undoBtn) undoBtn.remove();
+}
+
+function updateEntryCol(cardId, index, newCol) {
+  const card = document.getElementById(cardId);
+  if (card && card._smartResult && card._smartResult.entries[index]) {
+    card._smartResult.entries[index].col = newCol;
+  }
 }
 
 function removePdfCard(cardId, fileName) {
