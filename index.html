@@ -541,6 +541,7 @@ function buildSiteRows(sites) {
     let cells = COLS.map(c => {
       const v = getVal(site.id, c.id);
       return `<td style="padding:2px 4px"><input class="num-input" type="number" value="${v}"
+        data-site="${site.id}" data-col="${c.id}"
         onchange="setVal('${site.id}','${c.id}',+this.value)" onfocus="this.select()"></td>`;
     }).join('');
     return `<tr><td class="site-name">${site.name}</td>${cells}<td class="total-cell" id="rowtotal-${site.id}">${fmt(tot)}</td></tr>`;
@@ -616,8 +617,14 @@ function onDrop(e) {
 }
 function onFileSelect(e) { processFiles([...e.target.files]); e.target.value = ''; }
 
+const _processedFileNames = new Set();
+
 async function processFiles(files) {
   for (const file of files) {
+    if (_processedFileNames.has(file.name)) {
+      if (!confirm(`「${file.name}」はすでに追加されています。\n再度追加しますか？`)) continue;
+    }
+    _processedFileNames.add(file.name);
     await processPDF(file);
   }
 }
@@ -632,6 +639,7 @@ async function processPDF(file) {
   card.innerHTML = `<div class="pdf-card-header">
     <span>📄 ${file.name}</span>
     <span class="pdf-status">読み込み中…</span>
+    <button onclick="removePdfCard('${cardId}','${file.name}')" style="margin-left:auto;background:none;border:none;color:#999;font-size:16px;cursor:pointer;padding:0 4px" title="カードを削除">✕</button>
   </div>
   <div class="pdf-card-body"><p style="color:var(--muted);font-size:12px">テキストを抽出しています…</p></div>`;
   container.insertBefore(card, container.firstChild);
@@ -967,11 +975,45 @@ function applySmartFill(cardId) {
   card._smartResult.entries.forEach(e => {
     const current = getVal(e.siteId, e.col);
     setVal(e.siteId, e.col, current + e.amount);
-    const inp = document.querySelector(`input[data-site="${e.siteId}"][data-col="${e.col}"]`);
-    if (inp) inp.value = getVal(e.siteId, e.col);
   });
-  const btn = card.querySelector('button');
-  if (btn) { btn.textContent = '✓ 入力済み'; btn.disabled = true; btn.style.opacity = '.6'; }
+  card._applied = true;
+  renderEntry();
+  const btns = card.querySelectorAll('button');
+  const applyBtn = [...btns].find(b => b.textContent.includes('一括自動入力'));
+  if (applyBtn) {
+    applyBtn.textContent = '✓ 入力済み'; applyBtn.disabled = true; applyBtn.style.opacity = '.6';
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'undo-btn';
+    undoBtn.textContent = '↩ 取り消し';
+    undoBtn.style.cssText = 'margin-left:8px;background:#dc2626;color:#fff;border:none;border-radius:4px;padding:8px 16px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer';
+    undoBtn.onclick = () => undoSmartFill(cardId);
+    applyBtn.parentNode.insertBefore(undoBtn, applyBtn.nextSibling);
+  }
+}
+
+function undoSmartFill(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card || !card._smartResult || !card._applied) return;
+  card._smartResult.entries.forEach(e => {
+    setVal(e.siteId, e.col, getVal(e.siteId, e.col) - e.amount);
+  });
+  card._applied = false;
+  renderEntry();
+  const applyBtn = [...card.querySelectorAll('button')].find(b => b.textContent.includes('入力済み'));
+  const undoBtn = card.querySelector('.undo-btn');
+  if (applyBtn) { applyBtn.textContent = '▶ 一括自動入力'; applyBtn.disabled = false; applyBtn.style.opacity = '1'; }
+  if (undoBtn) undoBtn.remove();
+}
+
+function removePdfCard(cardId, fileName) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  if (card._applied) {
+    if (!confirm('このPDFの入力内容を取り消してカードを削除しますか？')) return;
+    undoSmartFill(cardId);
+  }
+  _processedFileNames.delete(fileName);
+  card.remove();
 }
 
 function saveSuiMappingFromCard(cardId, suiIds) {
