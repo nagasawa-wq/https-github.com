@@ -722,9 +722,18 @@ function smartParsePDF(filename, text) {
   return null;
 }
 
+function extractPeriod(text) {
+  // YYYY年MM月
+  let m = text.match(/(\d{4})年\s*(\d{1,2})月/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}`;
+  // YYYY/MM/DD or YYYY/MM
+  m = text.match(/(\d{4})\/(\d{2})(?:\/\d{2})?/);
+  if (m) return `${m[1]}-${m[2]}`;
+  return null;
+}
+
 function parseLINQSEA(text) {
   const entries = [];
-  // Each data row: {index} {site name} {6-digit code} {txCount} {amount} ...
   const rowRe = /(\d{1,2})\s+(.+?)\s+(\d{6})\s+(\d+)\s+(\d+)/g;
   let m;
   while ((m = rowRe.exec(text)) !== null) {
@@ -737,7 +746,7 @@ function parseLINQSEA(text) {
     const site = findSiteByName(name);
     if (site) entries.push({ siteId: site.id, col: 'rc', amount });
   }
-  return { format: 'LINQSEA（ロボペイ クレカ）', entries, unmappedIds: {} };
+  return { format: 'LINQSEA（ロボペイ クレカ）', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
 
 function parseSUI(text) {
@@ -778,7 +787,7 @@ function parseSUI(text) {
       unmappedIds[suiId] = amount;
     }
   }
-  return { format: 'SUI（プライムバンテージ）', entries, unmappedIds };
+  return { format: 'SUI（プライムバンテージ）', entries, unmappedIds, period: extractPeriod(text) };
 }
 
 function parseMaxConnect(text) {
@@ -812,7 +821,7 @@ function parseMaxConnect(text) {
       }
     }
   }
-  return { format: 'マックスコネクト', entries, unmappedIds: {} };
+  return { format: 'マックスコネクト', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
 
 function parseRobotPayment(text) {
@@ -830,10 +839,13 @@ function parseRobotPayment(text) {
   // Check 売上代金対象期間 → determine if 2ヶ月後 (rc2/rb2)
   const periodM = text.match(/売上代金対象期間\s+(\d{4})年(\d{2})月/);
   let isDelayed = false;
+  let pdfPeriod = null;
   if (periodM) {
     const py = parseInt(periodM[1]), pm = parseInt(periodM[2]);
     const [cy, cm] = currentMonth.split('-').map(Number);
     isDelayed = (cy * 12 + cm) - (py * 12 + pm) >= 2;
+    // 入金される月（2ヶ月後なら currentMonth、即時なら対象期間の月）
+    pdfPeriod = isDelayed ? currentMonth : `${periodM[1]}-${periodM[2]}`;
   }
 
   // クレカ: カード 売上代金計算書 → 合計 {件数} {金額(A)} {手数料}
@@ -855,7 +867,7 @@ function parseRobotPayment(text) {
   }
 
   const siteName = [...SITES, ...SELF_SITES].find(s => s.id === siteId)?.name || storeId;
-  return { format: 'ROBOT PAYMENT（' + siteName + '）', entries, unmappedIds: {} };
+  return { format: 'ROBOT PAYMENT（' + siteName + '）', entries, unmappedIds: {}, period: pdfPeriod };
 }
 
 function parseUPC(text) {
@@ -880,7 +892,7 @@ function parseUPC(text) {
   }
 
   const siteName = [...SITES, ...SELF_SITES].find(s => s.id === siteId)?.name || rawName;
-  return { format: 'ユニヴァ（' + siteName + '）', entries, unmappedIds: {} };
+  return { format: 'ユニヴァ（' + siteName + '）', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
 
 function parsePaymentFor(text) {
@@ -895,7 +907,7 @@ function parsePaymentFor(text) {
       if (storeName.includes(k) || k.includes(storeName)) { siteId = v; break; }
     }
   }
-  if (!siteId) return { format: 'ペイメントフォー', entries, unmappedIds: {} };
+  if (!siteId) return { format: 'ペイメントフォー', entries, unmappedIds: {}, period: extractPeriod(text) };
 
   // 今回取扱金額合計 A
   const amtM = text.match(/今回取扱金額合計\s*A\s*([\d,]+)/);
@@ -904,14 +916,19 @@ function parsePaymentFor(text) {
     if (amount > 0) entries.push({ siteId, col: 'pmf', amount });
   }
 
-  return { format: 'ペイメントフォー（PAYMENT FOR）', entries, unmappedIds: {} };
+  return { format: 'ペイメントフォー（PAYMENT FOR）', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
 
 function renderSmartCard(card, result) {
   const allSites = [...SITES, ...SELF_SITES];
   const cardId = card.id;
 
-  let html = `<div style="margin-bottom:10px"><span style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">${result.format}</span></div>`;
+  const periodLabel = result.period ? result.period.replace(/^(\d{4})-(\d{2})$/, '$1年$2月') : null;
+  const periodMismatch = result.period && result.period !== currentMonth;
+  let html = `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">${result.format}</span>
+    ${periodLabel ? `<span style="background:${periodMismatch?'#fef9c3':'#dcfce7'};color:${periodMismatch?'#854d0e':'#166534'};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">📅 ${periodLabel}${periodMismatch?' ⚠ 選択中の月と異なります':''}</span>` : ''}
+  </div>`;
 
   if (result.entries.length > 0) {
     html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px">
@@ -972,7 +989,37 @@ function renderSmartCard(card, result) {
 function applySmartFill(cardId) {
   const card = document.getElementById(cardId);
   if (!card || !card._smartResult) return;
-  card._smartResult.entries.forEach(e => {
+  const result = card._smartResult;
+  if (result.period && result.period !== currentMonth) {
+    const pLabel = result.period.replace(/^(\d{4})-(\d{2})$/, '$1年$2月');
+    const cLabel = currentMonth.replace(/^(\d{4})-(\d{2})$/, '$1年$2月');
+    if (!confirm(`このPDFの集計期間は ${pLabel} ですが、現在選択中の月は ${cLabel} です。\n\n${pLabel} に切り替えて入力しますか？\n（「キャンセル」で ${cLabel} のまま入力）`)) {
+      // Keep current month, just apply
+    } else {
+      currentMonth = result.period;
+      document.getElementById('globalMonth').value = currentMonth;
+      subscribeMonth(currentMonth);
+      // Wait for data to load then apply
+      const origApply = () => {
+        result.entries.forEach(e => setVal(e.siteId, e.col, getVal(e.siteId, e.col) + e.amount));
+        card._applied = true;
+        renderEntry();
+        const applyBtn = [...card.querySelectorAll('button')].find(b => b.textContent.includes('一括自動入力'));
+        if (applyBtn) {
+          applyBtn.textContent = '✓ 入力済み'; applyBtn.disabled = true; applyBtn.style.opacity = '.6';
+          const undoBtn = document.createElement('button');
+          undoBtn.className = 'undo-btn';
+          undoBtn.textContent = '↩ 取り消し';
+          undoBtn.style.cssText = 'margin-left:8px;background:#dc2626;color:#fff;border:none;border-radius:4px;padding:8px 16px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer';
+          undoBtn.onclick = () => undoSmartFill(cardId);
+          applyBtn.parentNode.insertBefore(undoBtn, applyBtn.nextSibling);
+        }
+      };
+      setTimeout(origApply, 1200);
+      return;
+    }
+  }
+  result.entries.forEach(e => {
     const current = getVal(e.siteId, e.col);
     setVal(e.siteId, e.col, current + e.amount);
   });
