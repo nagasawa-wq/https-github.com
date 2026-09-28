@@ -219,7 +219,17 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
       <p>またはクリックしてファイルを選択（複数選択可）</p>
     </div>
     <input type="file" id="pdfFileInput" accept=".pdf" multiple onchange="onFileSelect(event)">
-    <div id="pdfResults" class="pdf-results"></div>
+    <div id="pdfSessionArea" style="display:none;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px">今回のアップロード</div>
+      <div id="pdfResults" class="pdf-results"></div>
+    </div>
+    <div id="pdfHistoryArea">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase">保存済み履歴</span>
+        <span id="pdfHistoryCount" style="background:var(--navy);color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px"></span>
+      </div>
+      <div id="pdfHistoryList"><p style="color:var(--muted);font-size:12px">読込中…</p></div>
+    </div>
   </div>
 
   <!-- Tab 3: Summary (billing) -->
@@ -472,12 +482,17 @@ async function onMonthChange() {
   currentMonth = document.getElementById('globalMonth').value;
   setSyncStatus('読込中…');
   subscribeMonth(currentMonth);
+  document.getElementById('pdfResults').innerHTML = '';
+  document.getElementById('pdfSessionArea').style.display = 'none';
+  _processedFileNames.clear();
+  loadPdfHistory(currentMonth);
 }
 
 async function initData() {
   setSyncStatus('読込中…');
   await _db.ref('suiMapping').once('value').then(s => { _suiMappingCache = s.val() || {}; });
   subscribeMonth(currentMonth);
+  loadPdfHistory(currentMonth);
 }
 
 function getVal(sid, cid) { return (DATA[sid] && DATA[sid][cid]) ? +DATA[sid][cid] : 0; }
@@ -513,6 +528,61 @@ function switchTab(name, btn) {
   if (name === 'summary') renderSummary();
   if (name === 'summarySelf') renderSummarySelf();
   if (name === 'invoice') renderInvoices();
+  if (name === 'pdf') loadPdfHistory(currentMonth);
+}
+
+// ── PDF History ────────────────────────────────
+function saveHistory(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card || !card._smartResult) return;
+  const result = card._smartResult;
+  const entry = {
+    fileName: card._fileName || '不明',
+    format: result.format,
+    period: result.period || null,
+    entries: result.entries.map(e => ({ siteId: e.siteId, col: e.col, amount: e.amount })),
+    appliedAt: new Date().toISOString()
+  };
+  _db.ref(`pdfHistory/${currentMonth}/${Date.now()}`).set(entry)
+    .then(() => loadPdfHistory(currentMonth));
+}
+
+async function loadPdfHistory(month) {
+  const el = document.getElementById('pdfHistoryList');
+  const countEl = document.getElementById('pdfHistoryCount');
+  if (!el) return;
+  const snap = await _db.ref(`pdfHistory/${month}`).once('value');
+  const data = snap.val() || {};
+  const items = Object.entries(data)
+    .map(([key, v]) => ({ key, ...v }))
+    .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
+  if (countEl) countEl.textContent = items.length || '';
+  if (items.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:12px">この月の履歴はありません</p>';
+    return;
+  }
+  const allSites = [...SITES, ...SELF_SITES];
+  el.innerHTML = items.map(item => {
+    const dt = new Date(item.appliedAt);
+    const dateStr = `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    const periodLabel = item.period ? item.period.replace(/^(\d{4})-(\d{2})$/, '$1年$2月') : '';
+    const entrySummary = (item.entries || []).map(e => {
+      const site = allSites.find(s => s.id === e.siteId);
+      const col = COLS.find(c => c.id === e.col);
+      return `<span style="display:inline-block;background:#f0f4ff;border-radius:4px;padding:2px 8px;margin:2px 2px 2px 0;font-size:11px">${site?.name || e.siteId} <b>${col?.label.replace('\n','') || e.col}</b> ${fmt(e.amount)}</span>`;
+    }).join('');
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:4px">
+        <span style="font-size:13px;font-weight:700">📄 ${item.fileName}</span>
+        <span style="font-size:11px;color:var(--muted)">${dateStr}</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="background:#dbeafe;color:#1e40af;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">${item.format}</span>
+        ${periodLabel ? `<span style="background:#dcfce7;color:#166534;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">📅 ${periodLabel}</span>` : ''}
+      </div>
+      <div>${entrySummary}</div>
+    </div>`;
+  }).join('');
 }
 
 // ── Tab 1: Data Entry ─────────────────────────
@@ -642,6 +712,8 @@ async function processPDF(file) {
     <button onclick="removePdfCard('${cardId}','${file.name}')" style="margin-left:auto;background:none;border:none;color:#999;font-size:16px;cursor:pointer;padding:0 4px" title="カードを削除">✕</button>
   </div>
   <div class="pdf-card-body"><p style="color:var(--muted);font-size:12px">テキストを抽出しています…</p></div>`;
+  card._fileName = file.name;
+  document.getElementById('pdfSessionArea').style.display = 'block';
   container.insertBefore(card, container.firstChild);
 
   try {
@@ -1033,6 +1105,7 @@ function applySmartFill(cardId) {
     setVal(e.siteId, e.col, current + e.amount);
   });
   card._applied = true;
+  saveHistory(cardId);
   renderEntry();
   const btns = card.querySelectorAll('button');
   const applyBtn = [...btns].find(b => b.textContent.includes('一括自動入力'));
