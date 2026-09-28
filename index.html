@@ -762,7 +762,7 @@ const SUI_SITE_MAP = {
 const RP_STORE_MAP = {
   '130400':'roto','130901':'artist','130904':'self_full','131261':'self_classic',
   '131633':'self_bamon','131736':'self_milli','132555':'self_goun',
-  '132766':'self_rototo','132767':'self_rotostix','132769':'self_goun',
+  '132766':'self_rototo','132767':'self_rotostix','132768':'self_highland','132769':'self_goun',
   '133283':'self_tansen','133941':'self_togengo','134341':'skygate','134342':'winners',
   '128876':'self_secret','129834':'sherpa','130772':'bigbonus','130773':'self_restart',
   '130781':'self_lleague','130782':'self_ronew','130783':'nextdoor','133766':'familia','134024':'self_imrich',
@@ -905,7 +905,7 @@ function parseRobotPayment(text) {
   const siteId = RP_STORE_MAP[storeId];
 
   if (!siteId) {
-    return { format: 'ROBOT PAYMENT（未登録 店舗' + storeId + '）', entries, unmappedIds: { [storeId]: 0 } };
+    return { format: 'ROBOT PAYMENT（未登録 店舗' + storeId + '）', entries, unmappedIds: {}, rpUnknownStore: storeId };
   }
 
   // 売上代金対象期間 vs 月次対象月 でrc/rb か rc2/rb2 かを判定
@@ -1057,8 +1057,14 @@ function renderSmartCard(card, result) {
     </div>`;
   }
 
+  if (result.rpUnknownStore) {
+    html += `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:10px 12px;margin-top:8px;font-size:12px;color:#991b1b">
+      ⚠ 店舗ID <b>${result.rpUnknownStore}</b> はシステムに未登録です。管理者に連絡してください。
+    </div>`;
+  }
   card.querySelector('.pdf-status').textContent = result.entries.length > 0
     ? `${result.entries.length}件 自動検出`
+    : result.rpUnknownStore ? '未登録店舗'
     : Object.keys(result.unmappedIds).length > 0 ? 'SUI設定が必要' : '対象データなし';
   card.querySelector('.pdf-card-body').innerHTML = html;
 
