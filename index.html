@@ -836,23 +836,23 @@ function parseRobotPayment(text) {
     return { format: 'ROBOT PAYMENT（未登録 店舗' + storeId + '）', entries, unmappedIds: { [storeId]: 0 } };
   }
 
-  // 振込日から入金月を取得 → 対象期間との差で rc/rc2, rb/rb2 を判定
+  // 売上代金対象期間 vs 月次対象月 でrc/rb か rc2/rb2 かを判定
+  // 月次対象月 == 売上期間 → 通常 (rc/rb)
+  // 月次対象月 > 売上期間 → 2ヶ月後 (rc2/rb2)
   const periodM = text.match(/売上代金対象期間\s+(\d{4})年(\d{2})月/);
-  const furikomiM = text.match(/振込日[：:]\s*(\d{4})年(\d{2})月/) ||
-                    text.match(/明細発行日\s+(\d{4})年(\d{2})月/);
+  const serviceM = text.match(/月次対象月\s+(\d{4})年(\d{2})月/);
   let isDelayed = false;
   let pdfPeriod = null;
   if (periodM) {
     const py = parseInt(periodM[1]), pm = parseInt(periodM[2]);
-    let payY, payM;
-    if (furikomiM) {
-      payY = parseInt(furikomiM[1]); payM = parseInt(furikomiM[2]);
+    pdfPeriod = `${periodM[1]}-${periodM[2]}`;
+    if (serviceM) {
+      const sy = parseInt(serviceM[1]), sm = parseInt(serviceM[2]);
+      isDelayed = (sy * 12 + sm) - (py * 12 + pm) >= 1;
     } else {
       const [cy, cm] = currentMonth.split('-').map(Number);
-      payY = cy; payM = cm;
+      isDelayed = (cy * 12 + cm) - (py * 12 + pm) >= 2;
     }
-    isDelayed = (payY * 12 + payM) - (py * 12 + pm) >= 2;
-    pdfPeriod = `${payY}-${String(payM).padStart(2,'0')}`;
   }
 
   // クレカ: カード 売上代金計算書 → 合計 {件数} {金額(A)} {手数料}
