@@ -375,6 +375,7 @@ const SELF_SITES = [
   { id: 'self_ronew',    name: 'ロト超新塾',           owner: 'ichi',  ownerLabel: '1.2.3自社' },
   { id: 'self_hotline',  name: 'ホットライン',         owner: 'ichi',  ownerLabel: '1.2.3自社' },
   { id: 'self_secret',   name: 'シークレットベース',   owner: 'ichi',  ownerLabel: '1.2.3自社' },
+  { id: 'self_kinotora', name: '金ノ虎',              owner: 'ichi',  ownerLabel: '1.2.3自社' },
   { id: 'self_bb_pmf',   name: 'BIG BONUS（対象外）',  owner: 'ichi',  ownerLabel: '1.2.3自社' },
 ];
 
@@ -766,6 +767,8 @@ const RP_STORE_MAP = {
   '133283':'self_tansen','133941':'self_togengo','134341':'skygate','134342':'winners',
   '128876':'self_secret','129834':'sherpa','130772':'bigbonus','130773':'self_restart',
   '130781':'self_lleague','130782':'self_ronew','130783':'nextdoor','133766':'familia','134024':'self_imrich',
+  '130584':'self_rotofox','130703':'self_hunters','130903':'self_arcana',
+  '134025':'self_shiawase','130784':'self_kinotora','134340':'self_kuji',
 };
 
 // UPC 加盟店名 → site key
@@ -787,6 +790,7 @@ function findSiteByName(name) {
 function smartParsePDF(filename, text) {
   if (/LINQSEA/.test(text)) return parseLINQSEA(text);
   if (/マックスコネクト/.test(text)) return parseMaxConnect(text);
+  if (/CREDIX/.test(text)) return parseCREDIX(text);
   if (/SU HONG KONG|クレジット決済計算書/.test(text)) return parseSUI(text);
   if (/株式会社ROBOT PAYMENT/.test(text)) return parseRobotPayment(text);
   if (/ユニヴァ・ペイキャスト|univapay/i.test(text)) return parseUPC(text);
@@ -806,25 +810,25 @@ function extractPeriod(text) {
 
 function parseLINQSEA(text) {
   const entries = [];
-  const rowRe = /(\d{1,2})\s+(.+?)\s+(\d{6})\s+(\d+)\s+(\d+)/g;
+  const rowRe = /(\d{1,2})\s+(.+?)\s+(\d{6})\s+([\d,]+)\s+([\d,]+)/g;
   let m;
   while ((m = rowRe.exec(text)) !== null) {
     const idx = parseInt(m[1]);
     if (idx < 1 || idx > 99) continue;
     const name = m[2].trim();
     if (name === '合計' || name === '') continue;
-    const amount = parseInt(m[5]);
+    const amount = parseInt(m[5].replace(/,/g,''));
     if (amount <= 0) continue;
     const site = findSiteByName(name);
     if (site) entries.push({ siteId: site.id, col: 'rc', amount });
   }
-  return { format: 'LINQSEA（ロボペイ クレカ）', entries, unmappedIds: {}, period: extractPeriod(text) };
+  return { format: 'LINQSEA（リンクシー）', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
 
 function parseSUI(text) {
   const totals = {};
-  // Try transaction-level format first
-  const txRe = /(\d{8})\s+[0-9X]+\s+\d+\s+\d+\s+売上確定\s+([\d,]+)/g;
+  // Try transaction-level format (with or without spaces between fields)
+  const txRe = /(\d{8})\s*[0-9X]{16}\s*\d{13}\s*\d{14}\s*売上確定\s*([\d,]+)/g;
   let m;
   while ((m = txRe.exec(text)) !== null) {
     const id = m[1];
@@ -864,22 +868,30 @@ function parseSUI(text) {
 
 function parseMaxConnect(text) {
   const entries = [];
-  // Extract merchant name
+
+  // 銀振: "銀行振込決済計算書" — one site per PDF, site name given in サイト名 field
+  if (/銀行振込決済計算書/.test(text)) {
+    const siteNameM = text.match(/サイト名[：:]\s*(.+)/);
+    const siteName = siteNameM ? siteNameM[1].trim() : '';
+    const site = findSiteByName(siteName);
+    const amtM = text.match(/決済額\s+([\d,]+)/);
+    if (site && amtM) {
+      const amount = parseInt(amtM[1].replace(/,/g,''));
+      if (amount > 0) entries.push({ siteId: site.id, col: 'max', amount });
+    }
+    return { format: 'マックスコネクト（銀振）', entries, unmappedIds: {}, period: extractPeriod(text) };
+  }
+
+  // クレカ: summary line "株式会社XX 決済額 AMOUNT" (not card-type breakdown)
   const mMatch = text.match(/加盟店名\s+(株式会社[^\s\n]+)/);
   const merchant = mMatch ? mMatch[1] : '';
-
-  // Sum all 決済額 by card type
-  let total = 0;
-  const amtRe = /決済額[^\d]+([\d,]+)/g;
-  let m;
-  while ((m = amtRe.exec(text)) !== null) {
-    const v = parseInt(m[1].replace(/,/g,''));
-    if (v > 0) total += v;
-  }
+  const amtM = text.match(/株式会社.+?\s+決済額\s+([\d,]+)/);
+  const total = amtM ? parseInt(amtM[1].replace(/,/g,'')) : 0;
 
   if (total > 0) {
     const ownerMap = [
       ['Sunny Lab', 'self_milli'],
+      ['SunnyLab',  'self_milli'],
       ['サニーラボ', 'self_milli'],
       ['RIDE PLAN', 'self_tansen'],
       ['ライドプラン', 'self_tansen'],
@@ -893,7 +905,21 @@ function parseMaxConnect(text) {
       }
     }
   }
-  return { format: 'マックスコネクト', entries, unmappedIds: {}, period: extractPeriod(text) };
+  return { format: 'マックスコネクト（クレカ）', entries, unmappedIds: {}, period: extractPeriod(text) };
+}
+
+function parseCREDIX(text) {
+  const entries = [];
+  const siteM = text.match(/サイト名\s+(.+)/);
+  const siteName = siteM ? siteM[1].trim() : '';
+  const site = findSiteByName(siteName);
+  if (!site) return { format: 'CREDIX（未認識：' + siteName + '）', entries, unmappedIds: {}, period: extractPeriod(text) };
+  const amtM = text.match(/お支払額\s*\(JPY\)\s*([\d,]+)/);
+  if (amtM) {
+    const amount = parseInt(amtM[1].replace(/,/g,''));
+    if (amount > 0) entries.push({ siteId: site.id, col: 'credix', amount });
+  }
+  return { format: 'CREDIX（' + site.name + '）', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
 
 function parseRobotPayment(text) {
@@ -988,12 +1014,14 @@ function parsePaymentFor(text) {
   }
   if (!siteId) return { format: 'ペイメントフォー', entries, unmappedIds: {}, period: extractPeriod(text) };
 
-  // 今回取扱金額合計 A
-  const amtM = text.match(/今回取扱金額合計\s*A\s*([\d,]+)/);
-  if (amtM) {
-    const amount = parseInt(amtM[1].replace(/,/g,''));
-    if (amount > 0) entries.push({ siteId, col: 'pmf', amount });
+  // Sum amounts from card-type rows: each row ends with "AMOUNT RATE%"
+  let total = 0;
+  const amtRe = /([\d,]+)\s+\d+\.\d+%/g;
+  let amtM;
+  while ((amtM = amtRe.exec(text)) !== null) {
+    total += parseInt(amtM[1].replace(/,/g,''));
   }
+  if (total > 0) entries.push({ siteId, col: 'pmf', amount: total });
 
   return { format: 'ペイメントフォー（PAYMENT FOR）', entries, unmappedIds: {}, period: extractPeriod(text) };
 }
