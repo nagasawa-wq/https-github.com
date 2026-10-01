@@ -194,6 +194,7 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: va
     <input type="month" id="globalMonth" value="2026-07" onchange="onMonthChange()">
   </div>
   <div class="header-note" id="syncStatus">接続中…</div>
+  <button onclick="downloadSource()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);color:#fff;padding:5px 13px;border-radius:4px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">⬇ ソースDL</button>
 </div>
 
 <div class="tabs">
@@ -796,6 +797,17 @@ function smartParsePDF(filename, text) {
   if (/ユニヴァ・ペイキャスト|univapay/i.test(text)) return parseUPC(text);
   if (/株式会社ペイメントフォー/.test(text)) return parsePaymentFor(text);
   return null;
+}
+
+function downloadSource() {
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'invoice-system.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function extractPeriod(text) {
